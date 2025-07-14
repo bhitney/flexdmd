@@ -29,7 +29,7 @@ namespace FlexDMD
         private readonly float _prefWidth, _prefHeight;
         private readonly float[] _frameDelays;
         private readonly float _length;
-        private Bitmap _bitmap = null;
+        private CachedBitmap _cachedBitmap = null;
         private int _pos = 0;
 
         public GIFImage(AssetManager manager, string path, string name = "")
@@ -38,15 +38,15 @@ namespace FlexDMD
             _manager = manager;
             Name = name;
             // Initialize by loading the frame from the asset manager.
-            _bitmap = _manager.GetBitmap(_src);
-            _prefWidth = _bitmap.Width;
-            _prefHeight = _bitmap.Height;
-            var item = _bitmap.GetPropertyItem(PropertyTagFrameDelay);
-            _frameDelays = new float[_bitmap.GetFrameCount(FrameDimension.Time)];
+            _cachedBitmap = _manager.GetBitmap(_src);
+            _prefWidth = _cachedBitmap.Width;
+            _prefHeight = _cachedBitmap.Height;
+            var item = _cachedBitmap.Bitmap.GetPropertyItem(PropertyTagFrameDelay);
+            _frameDelays = new float[_cachedBitmap.Bitmap.GetFrameCount(FrameDimension.Time)];
             if (item.Type != 4)
             {
                 log.Error("Invalid GIF: frame delays are not of type 4 (32 bits unsigned int) but {0}", item.Type);
-                _bitmap = null;
+                _cachedBitmap = null;
                 return;
             }
             var length = 0f;
@@ -59,7 +59,7 @@ namespace FlexDMD
             Rewind();
             Pack();
             // Since we are not on stage, we can not guarantee that the data will remain live in memory
-            _bitmap = null;
+            _cachedBitmap.Bitmap = null;
         }
 
         public override float PrefWidth { get => _prefWidth; }
@@ -69,7 +69,8 @@ namespace FlexDMD
         protected override void OnStageStateChanged()
         {
             // Data returned by the asset manager are only valid when on stage
-            _bitmap = OnStage ? _manager.GetBitmap(_src) : null;
+            _cachedBitmap = OnStage ? _manager.GetBitmap(_src) : null;
+          //  _bitmap = OnStage ? _manager.GetBitmap(_src).Bitmap : null;
             UpdateFrame();
         }
 
@@ -99,23 +100,23 @@ namespace FlexDMD
 
         private void UpdateFrame()
         {
-            if (_bitmap != null)
+            if (_cachedBitmap != null)
             {
-                _bitmap.SelectActiveFrame(FrameDimension.Time, _pos);
-                Rectangle rect = new Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
-                BitmapData data = _bitmap.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format24bppRgb);
-                GraphicUtils.BGRtoRGB(data.Scan0, data.Stride, _bitmap.Width, _bitmap.Height);
-                _bitmap.UnlockBits(data);
+                _cachedBitmap.Bitmap.SelectActiveFrame(FrameDimension.Time, _pos);
+                Rectangle rect = new Rectangle(0, 0, _cachedBitmap.Width, _cachedBitmap.Height);
+                BitmapData data = _cachedBitmap.Bitmap.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format24bppRgb);
+                GraphicUtils.BGRtoRGB(data.Scan0, data.Stride, _cachedBitmap.Width, _cachedBitmap.Height);
+                _cachedBitmap.Bitmap.UnlockBits(data);
             }
         }
 
         public override void Draw(Graphics graphics)
         {
-            if (Visible && _bitmap != null)
+            if (Visible && _cachedBitmap != null)
             {
                 Layout.Scale(Scaling, PrefWidth, PrefHeight, Width, Height, out float w, out float h);
                 Layout.Align(Alignment, w, h, Width, Height, out float x, out float y);
-                graphics.DrawImage(_bitmap, (int)(X + x), (int)(Y + y), (int)w, (int)h);
+                graphics.DrawImage(_cachedBitmap.Bitmap, (int)(X + x), (int)(Y + y), (int)w, (int)h);
             }
         }
     }

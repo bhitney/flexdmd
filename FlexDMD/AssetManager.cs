@@ -60,12 +60,21 @@ namespace FlexDMD
         public CachedBitmap(Bitmap bitmap)
         {
             Bitmap = bitmap;
+
+            this.Width = Bitmap.Width;
+            this.Height = Bitmap.Height;
         }
         public CachedBitmap(Stream stream)
         {
             Stream = stream;
             Bitmap = new Bitmap(stream);
+
+            this.Width = Bitmap.Width;
+            this.Height = Bitmap.Height;
         }
+
+        public int Width { get; set; } = 0;
+        public int Height { get; set; } = 0;
     }
 
     /// <summary>
@@ -304,30 +313,31 @@ namespace FlexDMD
         /// <summary>
         /// Load a bitmap (still image or GIF), applying bitmap filters to still images.
         /// </summary>
-        public Bitmap GetBitmap(AssetSrc src)
+        public CachedBitmap GetBitmap(AssetSrc src)
         {
             if (src.AssetType != AssetType.Image && src.AssetType != AssetType.Gif) throw new Exception("Asked to load a bitmap from a resource of type " + src.AssetType);
             if (_cachedBitmaps.ContainsKey(src.Id))
             { // The requested bitmap is cached
-                return _cachedBitmaps[src.Id].Bitmap;
+                log.Info("Cached bitmap found:{0}", src.Id);
+                return _cachedBitmaps[src.Id];
             }
             else if (_cachedBitmaps.ContainsKey(src.IdWithoutOptions))
             { // The bitmap from which the requested one is derived is cached
                 var cache = new CachedBitmap(_cachedBitmaps[src.IdWithoutOptions].Bitmap);
                 _cachedBitmaps[src.Id] = cache;
-                log.Info("Bitmap added to cache:{0}", src.Id);
+                log.Info("Derived bitmap added to cache:{0}", src.Id);
                 if (!Array.Exists(cache.Bitmap.FrameDimensionsList, e => e == FrameDimension.Time.Guid))
                 { // Apply filters to still bitmaps
                     foreach (IBitmapFilter filter in src.BitmapFilters)
                         cache.Bitmap = filter.Filter(cache.Bitmap);
                 }
-                return cache.Bitmap;
+                return cache;
             }
             else
             { // This is a new bitmap that should be added to the cache
                 var cache = new CachedBitmap(Open(src));
                 _cachedBitmaps[src.IdWithoutOptions] = cache;
-                log.Info("Bitmap added to cache:{0}", src.IdWithoutOptions);
+                log.Info("New bitmap added to cache:{0}", src.IdWithoutOptions);
                 if (!Array.Exists(cache.Bitmap.FrameDimensionsList, e => e == FrameDimension.Time.Guid))
                 { // Apply RGB conversion and filters to still bitmaps
                     GraphicUtils.BGRtoRGB(cache.Bitmap);
@@ -337,10 +347,10 @@ namespace FlexDMD
                         _cachedBitmaps[src.Id] = cache;
                         foreach (IBitmapFilter filter in src.BitmapFilters)
                             cache.Bitmap = filter.Filter(cache.Bitmap);
-                        log.Info("Bitmap added to cache:{0}", src.Id);
+                        log.Info("Bitmap filters added to cache:{0}", src.Id);
                     }
                 }
-                return cache.Bitmap;
+                return cache;
             }
         }
 

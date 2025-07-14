@@ -12,6 +12,8 @@
    See the License for the specific language governing permissions and
    limitations under the License.
    */
+using NLog;
+using NLog.Fluent;
 using System;
 using System.Drawing;
 
@@ -19,28 +21,40 @@ namespace FlexDMD
 {
     public class Image : Actor, IImageActor
     {
+        private static readonly Logger log = LogManager.GetCurrentClassLogger();
         private readonly AssetSrc _src;
         private readonly AssetManager _manager;
         private readonly float _prefWidth, _prefHeight;
-        private Bitmap _bitmap = null;
+        private CachedBitmap _cachedBitmap = null;
+        // private Bitmap _bitmap = null;
 
-        public Scaling Scaling {get; set; } = Scaling.Stretch;
-		public Alignment Alignment {get; set; } = Alignment.Center;
+        public Scaling Scaling { get; set; } = Scaling.Stretch;
+        public Alignment Alignment { get; set; } = Alignment.Center;
         public override float PrefWidth { get => _prefWidth; }
         public override float PrefHeight { get => _prefHeight; }
 
         public Image(AssetManager manager, string path, string name = "")
         {
-            _src = manager.ResolveSrc(path);
-            _manager = manager;
-            Name = name;
-            // Initialize by loading the frame from the asset manager.
-            _bitmap = _manager.GetBitmap(_src);
-            _prefWidth = _bitmap.Width;
-            _prefHeight = _bitmap.Height;
-            Pack();
-            // Since we are not on stage, we can not guarantee that the data will remain live in memory
-            _bitmap = null;
+            try
+            {
+                log.Info($"Creating Image actor with path '{path}' and name '{name}'");
+                _src = manager.ResolveSrc(path);
+                _manager = manager;
+                Name = name;
+                // Initialize by loading the frame from the asset manager.
+                _cachedBitmap = _manager.GetBitmap(_src);
+                //_bitmap = _cachedBitmap.Bitmap;
+                _prefWidth = _cachedBitmap.Width;
+                _prefHeight = _cachedBitmap.Height;
+                Pack();
+                // Since we are not on stage, we can not guarantee that the data will remain live in memory
+                //_bitmap = null;
+                _cachedBitmap = null;
+            }
+            catch (Exception e)
+            {
+                log.Error(e, $"Failed to load image: {e.Message}");
+            }
         }
 
         /// <summary>
@@ -51,24 +65,29 @@ namespace FlexDMD
         {
             get
             {
-                if (_bitmap == null) _bitmap = _manager.GetBitmap(_src);
-                return _bitmap;
+                if (_cachedBitmap == null) _cachedBitmap = _manager.GetBitmap(_src);
+                return _cachedBitmap.Bitmap;
             }
-            set => _bitmap = value;
+            set
+            {
+                _cachedBitmap.Bitmap = value;
+            }
         }
         protected override void OnStageStateChanged()
         {
-            _bitmap = OnStage ? _manager.GetBitmap(_src) : null;
+            //_bitmap = OnStage ? _manager.GetBitmap(_src).Bitmap : null;
+            //_cachedBitmap.Bitmap = OnStage ? _manager.GetBitmap(_src).Bitmap : null;
+            _cachedBitmap = OnStage ? _manager.GetBitmap(_src) : null;
         }
 
         public override void Draw(Graphics graphics)
         {
-            if (Visible && _bitmap != null)
-			{
-				Layout.Scale(Scaling, PrefWidth, PrefHeight, Width, Height, out float w, out float h);
+            if (Visible && _cachedBitmap.Bitmap != null)
+            {
+                Layout.Scale(Scaling, PrefWidth, PrefHeight, Width, Height, out float w, out float h);
                 Layout.Align(Alignment, w, h, Width, Height, out float x, out float y);
-				graphics.DrawImage(_bitmap, (int)(X + x), (int)(Y + y), (int)w, (int)h);
-			}
+                graphics.DrawImage(_cachedBitmap.Bitmap, (int)(X + x), (int)(Y + y), (int)w, (int)h);
+            }
         }
     }
 }
